@@ -115,7 +115,7 @@ def send_email(html_content, job_count):
     service = build("gmail", "v1", credentials=creds)
 
     today = datetime.now().strftime("%B %d, %Y")
-    subject = f"🧭 Job Digest: {job_count} new PM roles — {today}"
+    subject = f"Job Digest: {job_count} new PM roles - {today}"
 
     email_lines = [
         "MIME-Version: 1.0",
