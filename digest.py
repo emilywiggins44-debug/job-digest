@@ -16,13 +16,15 @@ client = Anthropic()
 TARGET_ROLES = ["Senior Product Manager", "Principal Product Manager"]
 YOUR_EMAIL = os.environ.get("YOUR_EMAIL")
 
+
 def extract_jobs_from_page(url, content):
     """Send scraped content to Claude and extract matching jobs."""
+    today = datetime.now().strftime("%B %d, %Y")
     prompt = f"""You are analyzing a careers page for job listings.
 
 URL: {url}
 Target roles: {', '.join(TARGET_ROLES)}
-Today's date: {datetime.now().strftime('%Y-%m-%d')}
+Today's date: {today}
 
 Here is the raw text content from the page:
 {content}
@@ -53,7 +55,6 @@ Return ONLY the JSON array, no other text."""
 
     try:
         text = response.content[0].text.strip()
-        # Strip markdown code fences if present
         text = text.replace("```json", "").replace("```", "").strip()
         jobs = json.loads(text)
         return jobs if isinstance(jobs, list) else []
@@ -61,34 +62,42 @@ Return ONLY the JSON array, no other text."""
         logger.warning(f"Failed to parse Claude response for {url}: {e}")
         return []
 
+
 def build_email_html(all_jobs):
-    """Ask Claude to format all jobs into a clean email digest."""
+    """Build a plain text email digest."""
+    today = datetime.now().strftime("%B %d, %Y")
+
     if not all_jobs:
-        return "<p>No matching jobs found in the last 24 hours.</p>"
+        return f"🧭 Job Digest — {today}\n\nNo matching Senior PM or Principal PM roles found today.\n\n— Your Job Digest Bot"
 
-    jobs_text = json.dumps(all_jobs, indent=2)
+    # Group jobs by company
+    by_company = {}
+    for job in all_jobs:
+        company = job.get("company", "Unknown")
+        if company not in by_company:
+            by_company[company] = []
+        by_company[company].append(job)
 
-    prompt = f"""You are creating a daily job digest email.
+    lines = []
+    lines.append(f"🧭 Job Digest — {today} | {len(all_jobs)} roles found")
+    lines.append("=" * 50)
+    lines.append("")
 
-Here are today's matching job listings in JSON:
-{jobs_text}
+    for company, jobs in sorted(by_company.items()):
+        lines.append(f"🏢 {company.upper()}")
+        lines.append("─" * 40)
+        for job in jobs:
+            lines.append(f"📌 {job.get('title', '')}")
+            lines.append(f"📍 {job.get('location', '')}")
+            lines.append(f"📝 {job.get('summary', '')}")
+            lines.append(f"🔗 {job.get('url', '')}")
+            lines.append("")
+        lines.append("")
 
-Create a clean, professional HTML email digest with:
-- A header showing today's date and total job count
-- Jobs grouped by company
-- Each job showing: title, location, a one-line summary, and a clickable "View Job" button/link
-- A clean, minimal design with good readability (use inline CSS only)
-- A footer that says "Powered by your Job Digest Bot"
+    lines.append("— Your Job Digest Bot")
 
-Return only the HTML, no other text."""
+    return "\n".join(lines)
 
-    response = client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return response.content[0].text.strip()
 
 def send_email(html_content, job_count):
     """Send the digest email via Gmail API."""
@@ -108,10 +117,9 @@ def send_email(html_content, job_count):
     today = datetime.now().strftime("%B %d, %Y")
     subject = f"🧭 Job Digest: {job_count} new PM roles — {today}"
 
-    # Build the raw email
     email_lines = [
         "MIME-Version: 1.0",
-        "Content-Type: text/html; charset=utf-8",
+        "Content-Type: text/plain; charset=utf-8",
         f"To: {YOUR_EMAIL}",
         f"From: {YOUR_EMAIL}",
         f"Subject: {subject}",
@@ -127,6 +135,7 @@ def send_email(html_content, job_count):
     ).execute()
 
     logger.info(f"Email sent successfully with {job_count} jobs")
+
 
 def main():
     logger.info("Starting job digest run...")
@@ -150,6 +159,7 @@ def main():
 
     # Step 4: Send it
     send_email(html_content, len(all_jobs))
+
 
 if __name__ == "__main__":
     main()
