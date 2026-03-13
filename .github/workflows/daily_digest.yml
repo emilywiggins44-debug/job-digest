@@ -1,9 +1,7 @@
 name: Daily Job Digest
 
 on:
-  schedule:
-    # Runs every day at 7:00 AM Pacific Time (15:00 UTC)
-    - cron: '0 15 * * *'
+  # schedule disabled — replaced by daily brief
   workflow_dispatch:
     # Allows you to run it manually from GitHub for testing
 
